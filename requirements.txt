@@ -1,0 +1,5 @@
+uk-covid19
+numpy
+scipy
+matplotlib
+pandas

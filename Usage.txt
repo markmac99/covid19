@@ -1,0 +1,21 @@
+Filters
+
+areaType : overview, nation, region, nhsRegion, utla, ltla (upper/lower tier local authority)
+areaName : England, Wales, Scotland, Northern Ireland, or a region (format unknown)
+areaCode : TBC
+date     : date as string yyyy-mm-dd
+
+Structure fields available
+
+areaType, AreaName, areaCode, date, hash, newCasesByPublishDate, cumCasesByPublishDate,
+cumCasesBySpecimenDateRate, newCasesBySpecimenDate, cumCasesBySpecimenDateRate, 
+cumCasesBySpecimenDate, maleCases, femaleCases, 
+[ fields breaking down by pillar]
+newAdmissions, cumAdmissions, cumAdmissionsByAge, cumTestsByPublishDate, newTestsByPublishDate, 
+covidOccupiedMVBeds, hospitalCases, plannedCapacityByPublishDate, 
+newDeaths28DaysByPublishDate, cumDeaths28DaysByPublishDate, cumDeaths28DaysByPublishDateRate, 
+newDeaths28DaysByDeathDate, cumDeaths28DaysByDeathDate, cumDeaths28DaysByDeathDateRate
+
+Formats
+csv, json, xml
+
