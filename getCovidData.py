@@ -1,27 +1,14 @@
 from uk_covid19 import Cov19API
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import numpy as np
-import csv
 import sys
 import os
-from datetime import datetime as dt
+import pandas
+from ast import literal_eval
+
 # from numpy.polynomial import polynomial
 
 MAFREQ = 14  # frequency for moving average
-
-
-structure = {
-    "date": "date",
-    "name": "areaName",
-    "code": "areaCode",
-    "dailyCases": "newCasesByPublishDate",
-    "newAdmissions": "newAdmissions",
-    "Deaths": "newDeaths28DaysByPublishDate",
-    "MVCases": "covidOccupiedMVBeds",
-    "DoseA": "cumPeopleVaccinatedFirstDoseByPublishDate",
-    "DoseB": "cumPeopleVaccinatedSecondDoseByPublishDate",
-}
 
 
 def moving_average(a, n=3):
@@ -36,6 +23,19 @@ def exponential_fit(x, a, b):
 
 
 def getData(typ, areatype, areaname):
+    structure = {
+        "date": "date",
+        "name": "areaName",
+        "code": "areaCode",
+        "dailyCases": "newCasesByPublishDate",
+        "newAdmissions": "newAdmissions",
+        "Deaths": "newDeaths28DaysByPublishDate",
+        "MVCases": "covidOccupiedMVBeds",
+        "DoseA": "cumPeopleVaccinatedFirstDoseByPublishDate",
+        "DoseB": "cumPeopleVaccinatedSecondDoseByPublishDate",
+        "Tests": "newTestsByPublishDate",
+    }
+
     if areatype == 'overview':
         filters = [f"areaType={ areatype }"]
 
@@ -52,152 +52,179 @@ def getData(typ, areatype, areaname):
     # data = api.get_csv()
     fname = os.path.join('./', areaname + '.csv')
     _ = api.get_csv(save_as=fname)
+    data = pandas.read_csv(fname)
 
-    return fname
+    return data
 
 
-def plotGraphs(fname, typ, areatype, areaname):
-    dts = []
-    cases = []
-    admts = []
-    dths = []
-    cma = []
-    cap = []
-    tstamps = []
-
-    with open(fname) as csvfile:
-        plots = csv.reader(csvfile, delimiter=',')
-        _ = next(plots)   # skip header row
-        for row in plots:
-            if len(row) > 0:
-                # print(row)
-                dat = dt.strptime(row[0], '%Y-%m-%d')
-                dts.append(dat)
-                tstamps.append(dat.timestamp())
-                cases.append(int(row[3]))
-                if len(row[4]) > 0:
-                    admts.append(int(row[4]))
-                else:
-                    admts.append(0)
-                if len(row[5]) > 0:
-                    dths.append(int(row[5]))
-                else:
-                    dths.append(0)
-                if len(row[6]) > 0:
-                    cap.append(int(row[6]))
-                else:
-                    cap.append(0)
-
-    for i in range(len(cases)):
-        if cases[i] == 0:
-            break
-    cases = cases[:i]
-    dths = dths[:i]
-    dts = dts[:i]
-    admts = admts[:i]
-    cap = cap[:i]
-    tstamps = tstamps[:i]
-
-    latestdths = 0
-    for d in dths:
-        if d > 0:
-            latestdths = d
-            break
-
-    print('latest data ', dts[0], cases[0], latestdths)
-
-    cma = moving_average(cases, MAFREQ)
-    for i in range(MAFREQ - 1):
-        cma = np.append(cma, [[0]])  # pad moving average with zeros
-
-    lbl = 'Unknown'
-    ldths = np.log(dths)
-    dispname = areaname
+def getDemographicData(areatype, areaname):
+    structure = {
+        "date": "date",
+        "name": "areaName",
+        "code": "areaCode",
+        "CasesByAge": "newCasesBySpecimenDateAgeDemographics"
+    }
     if areatype == 'overview':
-        dispname = 'National'
+        filters = [f"areaType={ areatype }"]
 
-    # miny = 5
-    if typ == 1:
-        lbl = "Deaths - " + dispname
-        ldths = np.log(dths)
-        # miny = min(ldths) - 0.2
-    elif typ == 2:
-        lbl = "New Cases - " + dispname
-        ldths = np.log(cases)
-        # miny = 1000
-    elif typ == 3:
-        lbl = "Req Ventilation - " + dispname
-        ldths = np.log(cap)
-        # miny = 40
-    elif typ == 4:
-        lbl = "Hosp Adm - " + dispname
-        ldths = np.log(admts)
-        # miny = 90
+    else:
+        filters = [f"areaType={ areatype }", f"areaName={ areaname }"]
 
-    nldths = []
-    nts = []
-    pdts = []
+    api = Cov19API(filters=filters, structure=structure)
 
-    for i in range(len(ldths)):
-        if ldths[i] > float('-inf'):
-            nldths.append(ldths[i])
-            nts.append(float(tstamps[i]))
-            pdts.append(dt.fromtimestamp(tstamps[i]))
+    upddt = api.get_release_timestamp()
+    print('Data last updated: ', upddt)
 
-    # extend the data using an exponential fit
-    # coeffs = polynomial.polyfit(np.asarray(nts), np.asarray(nldths), 1)
-    # dfit = polynomial.Polynomial(coeffs)
+    # get data as csv. Can also get as json or xml
+    # and save it to a file
+    # data = api.get_csv()
+    fname = os.path.join('./', 'demographics-{}'.format(areaname) + '.csv')
+    print(fname)
+    _ = api.get_csv(save_as=fname)
+    data = pandas.read_csv(fname,converters={"CasesByAge": literal_eval})
+    tod = data[data['date']==max(data['date'])]
+    vals = tod['CasesByAge'][0]
+    with open('./case-demo-latest.csv', 'w') as outf:
+        for val in vals:
+            outf.write('{},{}\n'.format(val['age'], val['cases']))
 
-    next1 = nts[0]
-    for i in range(6):
-        n = next1 + (7 * i) * 86400
-        nts = np.concatenate(([n], nts))
-        pdts = np.concatenate(([dt.fromtimestamp(n)], pdts))
-        nldths = np.concatenate(([0], nldths))
+    with open('./case-demo-all.csv', 'w') as outf:
+        outf.write('areaCode,areaName,areaType,date,age,cases,rollingsum,rollingrate\n')
+        for d in data.iterrows():
+            vals = d[1]
+            recdt=vals['date']
+            name=vals['name']
+            code=vals['code']
+            for v in vals['CasesByAge']:
+                outf.write('{},{},{},{},{},{},{},{}\n'.format(code, name,'nation',
+                    recdt,v['age'], v['cases'], v['rollingSum'], v['rollingRate']))
 
-    # fitdths = dfit(np.asarray(nts))
+    structure = {
+        "date": "date",
+        "name": "areaName",
+        "code": "areaCode",
+        "CasesByAge": "newDeaths28DaysByDeathDateAgeDemographics"
+    }
+    if areatype == 'overview':
+        filters = [f"areaType={ areatype }"]
 
-    if False:
-        fig, ax1 = plt.subplots()
+    else:
+        filters = [f"areaType={ areatype }", f"areaName={ areaname }"]
 
-        # ax1.plot(dts, cma, label='cases')
-        ax1.plot(dts, cases, label='New Cases (left)', color='tab:blue')
-        ax1.set_ylabel('Cases')
+    api = Cov19API(filters=filters, structure=structure)
 
-        ax2 = ax1.twinx()  # use same x-axis
-        ax2.plot(dts, admts, label='Hosp Adm (right)', color='tab:green')
-        ax2.plot(dts, dths, label='deaths (right)', color='tab:red')
-        ax2.set_ylabel('Hosp Adm / Deaths')
+    upddt = api.get_release_timestamp()
+    print('Data last updated: ', upddt)
 
-        # ask matplotlib for the plotted objects and their labels
-        lines, labels = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax2.legend(lines + lines2, labels + labels2, loc='upper center')
+    # get data as csv. Can also get as json or xml
+    # and save it to a file
+    # data = api.get_csv()
+    fname = os.path.join('./', 'deathdemographics-{}'.format(areaname) + '.csv')
+    print(fname)
+    _ = api.get_csv(save_as=fname)
+    data = pandas.read_csv(fname,converters={"CasesByAge": literal_eval})
+    tod = data[data['date']==max(data['date'])]
+    vals = tod['CasesByAge'][0]
+    with open('./death-demo-latest.csv', 'w') as outf:
+        for val in vals:
+            outf.write('{},{}\n'.format(val['age'], val['deaths']))
 
-        # plt.plot(dts, cap, label='capacity')
+    with open('./death-demo-all.csv', 'w') as outf:
+        outf.write('areaCode,areaName,areaType,date,age,deaths,rollingsum,rollingrate\n')
+        for d in data.iterrows():
+            vals = d[1]
+            recdt=vals['date']
+            name=vals['name']
+            code=vals['code']
+            for v in vals['CasesByAge']:
+                outf.write('{},{},{},{},{},{},{},{}\n'.format(code, name,'nation',
+                    recdt,v['age'], v['deaths'], v['rollingSum'], v['rollingRate']))
 
-        plt.xlabel('Date')
-        # plt.ylabel('Number')
-        plt.title('Number of COVID Cases, Admissions & Deaths')
 
-        ax2.xaxis.set_major_formatter(mdates.DateFormatter("%y-%m"))
-        ax2.xaxis.set_minor_formatter(mdates.DateFormatter("%y-%m"))
-        _ = plt.xticks(rotation=90)
+    structure = {
+        "date": "date",
+        "name": "areaName",
+        "code": "areaCode",
+        "VaccByAge": "vaccinationsAgeDemographics"
+    }
+    if areatype == 'overview':
+        filters = [f"areaType={ areatype }"]
 
-        # fig.tight_layout()
-        # plt.show()
+    else:
+        filters = [f"areaType={ areatype }", f"areaName={ areaname }"]
 
-    fig, ax1 = plt.subplots()
+    api = Cov19API(filters=filters, structure=structure)
 
-    ax1.scatter(pdts, np.exp(nldths), label=lbl, color='tab:blue')
-    ax1.set_ylabel('Number')
-    ax1.set_yscale('log')
-    # ax1.plot(pdts, np.exp(fitdths), label='Fit', color='tab:green')
-    ax1.grid()
-    ax1.legend(loc='upper center')
-    # ax1.set_ylim(miny)
-    fig.tight_layout()
-    plt.show()
+    upddt = api.get_release_timestamp()
+    print('Data last updated: ', upddt)
+
+    # get data as csv. Can also get as json or xml
+    # and save it to a file
+    fname = os.path.join('./', 'vacc-demographics-{}'.format(areaname) + '.csv')
+    print(fname)
+    _ = api.get_csv(save_as=fname)
+    data = pandas.read_csv(fname, converters={"VaccByAge": literal_eval})
+    tod = data[data['date']==max(data['date'])]
+    vals = tod['VaccByAge'][0]
+    adultpop=0
+    with open('./vacc-demo-latest.csv', 'w') as outf:
+        for val in vals:
+            outf.write('{},{}, {}\n'.format(val['age'], val['VaccineRegisterPopulationByVaccinationDate'], val['cumPeopleVaccinatedCompleteByVaccinationDate']))
+            adultpop = adultpop + val['VaccineRegisterPopulationByVaccinationDate']
+
+    return adultpop
+
+
+def plotGraphs(data, adultpop):
+    dts = pandas.to_datetime(data['date'],format='%Y-%m-%d')
+    #cases = data['dailyCases']
+    #admts = data['newAdmissions']
+    #dths = data['Deaths']
+    #cap = data['MVCases']
+    dosea = data['DoseA']
+    doseb = data['DoseB']
+
+    dlyDoseA = -np.diff(dosea)
+    dlyDoseB = -np.diff(doseb)
+    totdlyDose = dlyDoseA + dlyDoseB
+    plt.clf()
+    fig, ax = plt.subplots()
+    ax.plot(dts[1:], dlyDoseA, color='red', label = 'Dose 1')
+    ax.plot(dts[1:], dlyDoseB, color='blue', label = 'Dose 2')
+    ax.plot(dts[1:], totdlyDose, color='green', label = 'Total')
+    ax.legend()
+    #ax.ticklabel_format(style='plain')
+    plt.title('Daily Vaccination Rate')
+    plt.savefig('daily_vacc_rate.png')
+
+    pctfullvacc = doseb  # *100.0/ adultpop
+    adpopline = [adultpop] * len(pctfullvacc)
+    for i in range(len(doseb)):
+        if np.isnan(doseb[i]):
+            adpopline[i] = np.nan
+    
+    fullvax = doseb.dropna().max()
+    partvax = dosea.dropna().max()
+    unvacad = (adultpop - partvax)/1e6
+    prvacad = (adultpop - fullvax - unvacad)/1e6
+    totpop = 66647112
+    chldren = (totpop - adultpop)/1e6
+
+    plt.clf()
+    fig, ax = plt.subplots()
+    plt.ticklabel_format(style='plain')
+    ax.plot(dts, pctfullvacc, color='blue', label='Full')
+    #ax.plot(dts, pctpartvacc, color='red', label='Part')
+    ax.plot(dts, adpopline, color='red', label='Adult Population')
+    
+    ax.legend()
+    plt.grid()
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    textstr = 'Unvaccinated: {:.1f}M adults and {:.1f}M children\nPart Vaccinated: {:.1f}M adults'.format(unvacad, chldren, prvacad)
+    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=11,
+        verticalalignment='top', bbox=props)
+    plt.title('Percent of Adults Vaccinated')
+    plt.savefig('vacc_pctage.png')
 
 
 if __name__ == '__main__':
@@ -207,13 +234,14 @@ if __name__ == '__main__':
 
     if len(sys.argv) == 1:
         arg1 = 2
-        plots = False
     else:
-        arg1 = sys.argv[1]
-        plots = True
+        arg1 = int(sys.argv[1])
 
-    fname = getData(int(arg1), 'overview', 'overview')
+    alldata = getData(int(arg1), 'overview', 'overview')
+
     getData(int(arg1), 'utla', 'oxfordshire')
     getData(int(arg1), 'ltla', 'west oxfordshire')
-    if plots is True:
-        plotGraphs(fname, int(arg1), 'overview', 'overview')
+
+    adultpop = getDemographicData('Nation', 'England')
+
+    plotGraphs(alldata, adultpop)

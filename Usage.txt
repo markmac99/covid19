@@ -16,6 +16,9 @@ covidOccupiedMVBeds, hospitalCases, plannedCapacityByPublishDate,
 newDeaths28DaysByPublishDate, cumDeaths28DaysByPublishDate, cumDeaths28DaysByPublishDateRate, 
 newDeaths28DaysByDeathDate, cumDeaths28DaysByDeathDate, cumDeaths28DaysByDeathDateRate
 
+newCasesBySpecimenDateAgeDemographics
+newDeaths28DaysByDeathDateAgeDemographics
+
 Formats
 csv, json, xml
 
