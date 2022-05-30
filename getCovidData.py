@@ -22,39 +22,65 @@ def exponential_fit(x, a, b):
     return a * x + b
 
 
-def getData(typ, areatype, areaname):
-    structure = {
-        "date": "date",
-        "name": "areaName",
-        "code": "areaCode",
-        "dailyCases": "newCasesByPublishDate",
-        "newAdmissions": "newAdmissions",
-        "Deaths": "newDeaths28DaysByPublishDate",
-        "MVCases": "covidOccupiedMVBeds",
-        "DoseA": "cumPeopleVaccinatedFirstDoseByPublishDate",
-        "DoseB": "cumPeopleVaccinatedSecondDoseByPublishDate",
-        "Tests": "newTestsByPublishDate",
-    }
-
+def getData(typ, areatype, areaname, splitdata=False):
+    if splitdata is False:
+        structure = {
+            "date": "date",
+            "name": "areaName",
+            "code": "areaCode",
+            "dailyCases": "newCasesByPublishDate",
+            "newAdmissions": "newAdmissions",
+            "Deaths": "newDeaths28DaysByPublishDate",
+            "MVCases": "covidOccupiedMVBeds",
+            "DoseA": "cumPeopleVaccinatedFirstDoseByPublishDate",
+            "DoseB": "cumPeopleVaccinatedSecondDoseByPublishDate",
+            "Tests": "newTestsByPublishDate",
+            "PCRTests": "newPCRTestsByPublishDate",
+            "DeathCert": "newDailyNsoDeathsByDeathDate",
+        }
+        structure2 = None
+    else:
+        structure = {
+            "date": "date",
+            "name": "areaName",
+            "code": "areaCode",
+            "dailyCases": "newCasesByPublishDate",
+            "newAdmissions": "newAdmissions",
+            "Deaths": "newDeaths28DaysByPublishDate",
+            "MVCases": "covidOccupiedMVBeds",
+            "DoseA": "cumPeopleVaccinatedFirstDoseByPublishDate",
+        }
+        structure2 = {
+            "date": "date",
+            "name": "areaName",
+            "code": "areaCode",
+            "DoseB": "cumPeopleVaccinatedSecondDoseByPublishDate",
+            "Tests": "newTestsByPublishDate",
+            "PCRTests": "newPCRTestsByPublishDate",
+            "DeathCert": "newDailyNsoDeathsByDeathDate",
+        }
     if areatype == 'overview':
         filters = [f"areaType={ areatype }"]
-
     else:
         filters = [f"areaType={ areatype }", f"areaName={ areaname }"]
-
     api = Cov19API(filters=filters, structure=structure)
-
     upddt = api.get_release_timestamp()
     print('Data last updated: ', upddt)
-
-    # get data as csv. Can also get as json or xml
-    # and save it to a file
-    # data = api.get_csv()
     fname = os.path.join('./', areaname + '.csv')
     _ = api.get_csv(save_as=fname)
     data = pandas.read_csv(fname)
-
-    return data
+    if structure2 is not None:
+        api = Cov19API(filters=filters, structure=structure2)
+        upddt = api.get_release_timestamp()
+        print('Data last updated: ', upddt)
+        fname = os.path.join('./', areaname + '_2.csv')
+        _ = api.get_csv(save_as=fname)
+    data2 = pandas.read_csv(fname)
+    data = data.set_index('date')
+    data2 = data2.set_index('date')
+    data2 = data2.drop(columns=['name','code'])
+    data3 = pandas.concat([data,data2],axis=1)
+    return data3
 
 
 def getDemographicData(areatype, areaname):
@@ -237,11 +263,27 @@ if __name__ == '__main__':
     else:
         arg1 = int(sys.argv[1])
 
-    alldata = getData(int(arg1), 'overview', 'overview')
+    #alldata = getData(int(arg1), 'overview', 'overview')
 
+    engl = getData(int(arg1), 'nation', 'England', splitdata=True) # england
+    nire = getData(int(arg1), 'nation', 'Northern Ireland', splitdata=True) # NI
+    scot = getData(int(arg1), 'nation', 'Scotland', splitdata=True) # scotland
+    wale = getData(int(arg1), 'nation', 'Wales', splitdata=True) # wales
+    engl = engl.drop(columns=['name','code'])
+    scot = scot.drop(columns=['name','code'])
+    wale = wale.drop(columns=['name','code'])
+    nire = nire.drop(columns=['name','code'])
+    alln = engl.add(scot, fill_value=0)
+    alln = alln.add(wale, fill_value=0)
+    alln = alln.add(nire, fill_value=0)
+    alln['name']='United Kingdom'
+    alln['code']='K02000001'
+    alln=alln[['name','code','dailyCases','newAdmissions','Deaths','MVCases','DoseA','DoseB','Tests','PCRTests','DeathCert']]
+    alln.to_csv('./overview.csv', index_label='date')
+    
     getData(int(arg1), 'utla', 'oxfordshire')
     getData(int(arg1), 'ltla', 'west oxfordshire')
 
     adultpop = getDemographicData('Nation', 'England')
 
-    plotGraphs(alldata, adultpop)
+    #plotGraphs(alln, adultpop)
